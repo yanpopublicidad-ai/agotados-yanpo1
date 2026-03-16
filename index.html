@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YANPO — Análisis de Agotados</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap');
+:root{--bg:#0e0f13;--surface:#16181f;--surface2:#1e2029;--border:#2a2d3a;--accent:#f0a500;--accent2:#e05c2a;--green:#2ecc71;--red:#e74c3c;--text:#e8eaf0;--muted:#7a7f9a;--mono:'Space Mono',monospace;--sans:'DM Sans',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(240,165,0,.03)1px,transparent 1px),linear-gradient(90deg,rgba(240,165,0,.03)1px,transparent 1px);background-size:40px 40px;pointer-events:none;z-index:0;}
+.wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:40px 24px;}
+header{margin-bottom:40px;}
+.logo{font-family:var(--mono);font-size:11px;letter-spacing:4px;color:var(--accent);margin-bottom:10px;}
+h1{font-family:var(--mono);font-size:clamp(22px,4vw,36px);font-weight:700;line-height:1.1;margin-bottom:8px;}
+h1 span{color:var(--accent);}
+.subtitle{font-size:14px;color:var(--muted);}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;}
+@media(max-width:600px){.upload-grid{grid-template-columns:1fr;}}
+.upload-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;position:relative;overflow:hidden;transition:border-color .2s;}
+.upload-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--accent);transform:scaleX(0);transition:transform .3s;transform-origin:left;}
+.upload-card.loaded::before{transform:scaleX(1);}
+.upload-card.loaded{border-color:var(--accent);}
+.card-label{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:var(--accent);margin-bottom:6px;}
+.card-title{font-size:15px;font-weight:600;margin-bottom:4px;}
+.card-desc{font-size:12px;color:var(--muted);margin-bottom:14px;}
+/* GS INPUT */
+.gs-row{display:flex;gap:8px;align-items:stretch;}
+.gs-input{flex:1;background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:11px;padding:10px 12px;outline:none;transition:border-color .2s;min-width:0;}
+.gs-input:focus{border-color:var(--accent);}
+.gs-input::placeholder{color:var(--muted);}
+.btn-fetch{padding:10px 14px;background:var(--accent);color:#000;border:none;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:1px;cursor:pointer;white-space:nowrap;transition:all .2s;}
+.btn-fetch:hover:not(:disabled){background:#ffb800;}
+.btn-fetch:disabled{opacity:.4;cursor:not-allowed;}
+.btn-reload{padding:10px 13px;background:var(--surface2);color:var(--accent);border:1px solid var(--accent);border-radius:8px;font-family:var(--mono);font-size:13px;cursor:pointer;transition:all .2s;}
+.btn-reload:hover:not(:disabled){background:rgba(240,165,0,.1);}
+.btn-reload:disabled{opacity:.3;cursor:not-allowed;}
+.gs-hint{margin-top:10px;font-size:11px;color:var(--muted);background:rgba(240,165,0,.05);border-left:2px solid var(--accent);padding:8px 10px;border-radius:0 6px 6px 0;line-height:1.6;}
+.gs-error{display:none;margin-top:8px;font-size:11px;color:var(--red);font-family:var(--mono);white-space:pre-line;background:rgba(231,76,60,.08);padding:8px 10px;border-radius:6px;border:1px solid rgba(231,76,60,.2);}
+/* FILE UPLOAD */
+.upload-zone{border:1.5px dashed var(--border);border-radius:8px;padding:18px;text-align:center;cursor:pointer;transition:all .2s;position:relative;}
+.upload-zone:hover{border-color:var(--accent);background:rgba(240,165,0,.04);}
+.upload-zone input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;}
+.upload-icon{font-size:26px;margin-bottom:6px;}
+.upload-text{font-size:12px;color:var(--muted);}
+.upload-text strong{color:var(--text);display:block;margin-top:3px;font-family:var(--mono);font-size:11px;}
+.file-status{margin-top:8px;font-size:12px;font-family:var(--mono);color:var(--green);display:none;align-items:center;gap:6px;}
+.file-status.show{display:flex;}
+/* CONFIG */
+.config-row{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin-bottom:20px;display:flex;align-items:center;gap:20px;flex-wrap:wrap;}
+.config-row label{font-size:13px;color:var(--muted);}
+.config-row select{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:13px;padding:8px 12px;outline:none;transition:border-color .2s;}
+.config-row select:focus{border-color:var(--accent);}
+/* BUTTON RUN */
+.btn-run{width:100%;padding:18px;background:var(--accent);color:#000;border:none;border-radius:10px;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:2px;cursor:pointer;transition:all .2s;margin-bottom:36px;}
+.btn-run:hover:not(:disabled){background:#ffb800;transform:translateY(-1px);}
+.btn-run:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+/* STATS */
+#results{display:none;}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:28px;}
+@media(max-width:700px){.stats-row{grid-template-columns:repeat(2,1fr);}}
+.stat-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 14px;text-align:center;}
+.stat-num{font-family:var(--mono);font-size:30px;font-weight:700;color:var(--accent);display:block;line-height:1;margin-bottom:5px;}
+.stat-label{font-size:11px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;}
+/* TABS */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);}
+.tab{padding:11px 18px;font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;user-select:none;}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+.tab:hover:not(.active){color:var(--text);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-top:none;border-radius:0 0 12px 12px;overflow:hidden;}
+.table-toolbar{padding:12px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.search-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 12px;outline:none;width:200px;transition:border-color .2s;}
+.search-input:focus{border-color:var(--accent);}
+.table-count{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto;}
+.btn-export{padding:7px 13px;background:transparent;border:1px solid var(--accent);color:var(--accent);border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .2s;}
+.btn-export:hover{background:var(--accent);color:#000;}
+.data-table{width:100%;border-collapse:collapse;font-size:13px;}
+.data-table th{background:var(--surface2);padding:10px 14px;text-align:left;font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1px solid var(--border);}
+.data-table th:hover{color:var(--accent);}
+.data-table td{padding:10px 14px;border-bottom:1px solid rgba(42,45,58,.5);vertical-align:middle;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.data-table tr:hover td{background:rgba(240,165,0,.04);}
+.data-table tr:last-child td{border-bottom:none;}
+.badge{display:inline-block;padding:3px 10px;border-radius:20px;font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:1px;}
+.badge-green{background:rgba(46,204,113,.15);color:var(--green);}
+.badge-red{background:rgba(231,76,60,.15);color:var(--red);}
+.badge-yellow{background:rgba(240,165,0,.15);color:var(--accent);}
+.badge-gray{background:rgba(122,127,154,.15);color:var(--muted);}
+.badge-orange{background:rgba(224,92,42,.15);color:var(--accent2);}
+.code-chip{font-family:var(--mono);font-size:11px;color:var(--accent);background:rgba(240,165,0,.08);padding:2px 8px;border-radius:4px;}
+.table-scroll{overflow-x:auto;max-height:500px;overflow-y:auto;}
+.table-scroll::-webkit-scrollbar{width:5px;height:5px;}
+.table-scroll::-webkit-scrollbar-track{background:var(--surface2);}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.empty-state{text-align:center;padding:50px 20px;color:var(--muted);font-family:var(--mono);font-size:13px;}
+.toast{position:fixed;bottom:28px;right:28px;background:var(--surface2);border:1px solid var(--accent);color:var(--text);padding:12px 18px;border-radius:10px;font-size:13px;font-family:var(--mono);z-index:9999;transform:translateY(70px);opacity:0;transition:all .3s;}
+.toast.show{transform:translateY(0);opacity:1;}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.3);border-top-color:#000;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:6px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">▸ YANPO — Sistema de Inventario</div>
+    <h1>ANÁLISIS DE <span>AGOTADOS</span><br>VS PEDIDOS ENTRANTES</h1>
+    <p class="subtitle">Conecta tu Google Sheets, sube el Excel de bodega y genera el reporte al instante</p>
+  </header>
+
+  <div class="upload-grid">
+    <!-- CARD 1: Google Sheets -->
+    <div class="upload-card" id="card1">
+      <div class="card-label">Fuente 01 — Google Sheets</div>
+      <div class="card-title">Histórico de Agotados</div>
+      <div class="card-desc">Pega el link de publicación CSV de tu Sheet</div>
+      <div class="gs-row">
+        <input type="text" id="gsLink" class="gs-input" placeholder="https://docs.google.com/spreadsheets/d/e/..." oninput="onLinkInput(this.value)">
+        <button class="btn-fetch" id="btnFetch" onclick="fetchSheet()" disabled>↻ CARGAR</button>
+        <button class="btn-reload" id="btnReload" onclick="reloadSheet()" disabled title="Recargar datos sin pegar el link">↺</button>
+      </div>
+      <div class="gs-error" id="gsError"></div>
+      <div class="file-status" id="status1">✓ <span id="status1name"></span></div>
+      <div class="gs-hint">
+        💡 Ya tienes el link correcto. Pégalo arriba y presiona <strong>↻ CARGAR</strong>.<br>
+        Cuando agregues más registros al mes, solo presiona <strong>↺</strong> para actualizar.
+      </div>
+    </div>
+
+    <!-- CARD 2: Excel local -->
+    <div class="upload-card" id="card2">
+      <div class="card-label">Archivo 02 — Excel local</div>
+      <div class="card-title">Pedido Entrante (Bodega)</div>
+      <div class="card-desc">Excel con las hojas del pedido (53VO, Wait 54VO...)</div>
+      <div class="upload-zone">
+        <input type="file" accept=".xlsx,.xls" id="fileBodega" onchange="handleFile(this,'bodega','card2','status2')">
+        <div class="upload-icon">📦</div>
+        <div class="upload-text">Arrastra o haz clic<strong>archivo_para_bodega.xlsx</strong></div>
+      </div>
+      <div class="file-status" id="status2">✓ <span id="status2name"></span></div>
+    </div>
+  </div>
+
+  <div class="config-row">
+    <label>📅 Mes a analizar:</label>
+    <select id="selMes">
+      <option value="1">Enero</option><option value="2">Febrero</option>
+      <option value="3" selected>Marzo</option><option value="4">Abril</option>
+      <option value="5">Mayo</option><option value="6">Junio</option>
+      <option value="7">Julio</option><option value="8">Agosto</option>
+      <option value="9">Septiembre</option><option value="10">Octubre</option>
+      <option value="11">Noviembre</option><option value="12">Diciembre</option>
+    </select>
+    <select id="selAno">
+      <option value="2025">2025</option>
+      <option value="2026" selected>2026</option>
+    </select>
+  </div>
+
+  <button class="btn-run" id="btnRun" onclick="runAnalysis()" disabled>▸ GENERAR ANÁLISIS</button>
+
+  <div id="results">
+    <div class="stats-row">
+      <div class="stat-box"><span class="stat-num" id="stTotal">0</span><div class="stat-label">Códigos agotados</div></div>
+      <div class="stat-box"><span class="stat-num" style="color:var(--green)" id="stSi">0</span><div class="stat-label">Sí llegan</div></div>
+      <div class="stat-box"><span class="stat-num" style="color:var(--red)" id="stNo">0</span><div class="stat-label">No llegan</div></div>
+      <div class="stat-box"><span class="stat-num" style="color:var(--accent2)" id="stPedidos">0</span><div class="stat-label">Total pedidos</div></div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('tab-all',this)">📋 Todos</div>
+      <div class="tab" onclick="switchTab('tab-si',this)">✅ Sí llegan</div>
+      <div class="tab" onclick="switchTab('tab-no',this)">❌ No llegan</div>
+      <div class="tab" onclick="switchTab('tab-llegan',this)">📦 Llegan sin pedido</div>
+    </div>
+
+    <!-- TAB TODOS -->
+    <div class="tab-content table-wrap active" id="tab-all">
+      <div class="table-toolbar">
+        <input class="search-input" placeholder="🔍 Buscar código..." oninput="filterTable('tbl-all',this.value)">
+        <span class="table-count" id="cnt-all"></span>
+        <button class="btn-export" onclick="exportTab('all')">↓ EXPORTAR</button>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="tbl-all">
+        <thead><tr>
+          <th onclick="sortTable('tbl-all',0)">Código</th>
+          <th onclick="sortTable('tbl-all',1)">Cant. solicitada</th>
+          <th onclick="sortTable('tbl-all',2)"># Pedidos</th>
+          <th onclick="sortTable('tbl-all',3)">Viene en</th>
+          <th onclick="sortTable('tbl-all',4)">Estado</th>
+          <th>Clientes</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+
+    <!-- TAB SÍ LLEGAN -->
+    <div class="tab-content table-wrap" id="tab-si">
+      <div class="table-toolbar">
+        <input class="search-input" placeholder="🔍 Buscar código..." oninput="filterTable('tbl-si',this.value)">
+        <span class="table-count" id="cnt-si"></span>
+        <button class="btn-export" onclick="exportTab('si')">↓ EXPORTAR</button>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="tbl-si">
+        <thead><tr>
+          <th onclick="sortTable('tbl-si',0)">Código</th>
+          <th onclick="sortTable('tbl-si',1)">Descripción</th>
+          <th onclick="sortTable('tbl-si',2)">Cant. solicitada</th>
+          <th onclick="sortTable('tbl-si',3)"># Pedidos</th>
+          <th onclick="sortTable('tbl-si',4)">Viene en</th>
+          <th onclick="sortTable('tbl-si',5)">Cant. que llega</th>
+          <th>Clientes</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+
+    <!-- TAB NO LLEGAN -->
+    <div class="tab-content table-wrap" id="tab-no">
+      <div class="table-toolbar">
+        <input class="search-input" placeholder="🔍 Buscar código..." oninput="filterTable('tbl-no',this.value)">
+        <span class="table-count" id="cnt-no"></span>
+        <button class="btn-export" onclick="exportTab('no')">↓ EXPORTAR</button>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="tbl-no">
+        <thead><tr>
+          <th onclick="sortTable('tbl-no',0)">Código</th>
+          <th onclick="sortTable('tbl-no',1)">Cant. solicitada</th>
+          <th onclick="sortTable('tbl-no',2)"># Pedidos</th>
+          <th onclick="sortTable('tbl-no',3)">Prioridad</th>
+          <th>Clientes</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+
+    <!-- TAB LLEGAN SIN PEDIDO -->
+    <div class="tab-content table-wrap" id="tab-llegan">
+      <div class="table-toolbar">
+        <input class="search-input" placeholder="🔍 Buscar código..." oninput="filterTable('tbl-llegan',this.value)">
+        <span class="table-count" id="cnt-llegan"></span>
+        <button class="btn-export" onclick="exportTab('llegan')">↓ EXPORTAR</button>
+      </div>
+      <div class="table-scroll"><table class="data-table" id="tbl-llegan">
+        <thead><tr>
+          <th onclick="sortTable('tbl-llegan',0)">Código</th>
+          <th onclick="sortTable('tbl-llegan',1)">Descripción</th>
+          <th onclick="sortTable('tbl-llegan',2)">Cantidad que llega</th>
+          <th onclick="sortTable('tbl-llegan',3)">Viene en</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const state = { agotados: null, bodega: null, csvUrl: null };
+let dataSets = {};
+
+// ===== GOOGLE SHEETS =====
+function onLinkInput(val) {
+  const v = val.trim();
+  // Acepta tanto el link publicado CSV como el link normal de Sheets
+  document.getElementById('btnFetch').disabled = v.length < 30;
+  document.getElementById('gsError').style.display = 'none';
+}
+
+function buildCsvUrl(raw) {
+  // Caso 1: ya es un link CSV publicado (tiene /pub? o pub?gid)
+  if (raw.includes('/pub') && raw.includes('output=csv')) return raw;
+  if (raw.includes('/pub') && raw.includes('output=csv') === false && raw.includes('gid')) {
+    return raw.includes('output=') ? raw.replace(/output=[^&]+/, 'output=csv') : raw + '&output=csv';
+  }
+  // Caso 2: link publicado sin output=csv
+  if (raw.includes('spreadsheets/d/e/')) {
+    const base = raw.split('?')[0];
+    return base + '?gid=0&single=true&output=csv';
+  }
+  // Caso 3: link normal de Sheets — usar gviz
+  const m = raw.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  if (m) return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv&sheet=Hoja%201`;
+  return null;
+}
+
+function csvToWorkbook(csvText) {
+  // Parsear CSV correctamente (maneja comillas)
+  const lines = csvText.split(/\r?\n/);
+  const rows = lines.map(line => {
+    const res = []; let cur = '', inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { res.push(cur.trim()); cur = ''; }
+      else { cur += c; }
+    }
+    res.push(cur.trim());
+    return res;
+  }).filter(r => r.some(c => c !== ''));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Hoja 1');
+  return wb;
+}
+
+async function fetchSheet() {
+  const raw = document.getElementById('gsLink').value.trim();
+  const csvUrl = buildCsvUrl(raw);
+  if (!csvUrl) { showGsError('❌ Link no reconocido. Usa el link que generaste en "Publicar en la web".'); return; }
+
+  const btn = document.getElementById('btnFetch');
+  btn.innerHTML = '<span class="spinner"></span>CARGANDO...';
+  btn.disabled = true;
+  document.getElementById('gsError').style.display = 'none';
+
+  try {
+    const resp = await fetch(csvUrl);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    if (!text || text.trim().length < 20) throw new Error('Archivo vacío o sin datos');
+    if (text.trim().startsWith('<!')) throw new Error('El archivo no es público o el link no es válido');
+
+    const wb = csvToWorkbook(text);
+    wb._csvUrl = csvUrl;
+    state.agotados = wb;
+    state.csvUrl = csvUrl;
+
+    const filas = text.split('\n').filter(r => r.trim()).length - 1;
+    document.getElementById('card1').classList.add('loaded');
+    document.getElementById('status1').classList.add('show');
+    document.getElementById('status1name').textContent = 'Google Sheets conectado — ' + filas.toLocaleString() + ' registros';
+    document.getElementById('btnReload').disabled = false;
+    checkReady();
+    showToast('✓ Google Sheets cargado — ' + filas.toLocaleString() + ' registros');
+  } catch(e) {
+    showGsError('❌ Error: ' + e.message + '\n\nVerifica que el link sea el de "Publicar en la web → CSV".');
+  }
+  btn.textContent = '↻ CARGAR';
+  btn.disabled = false;
+}
+
+async function reloadSheet() {
+  if (!state.csvUrl) return;
+  const btn = document.getElementById('btnReload');
+  btn.textContent = '...'; btn.disabled = true;
+  try {
+    const url = state.csvUrl + (state.csvUrl.includes('?') ? '&' : '?') + 'cb=' + Date.now();
+    const resp = await fetch(url);
+    const text = await resp.text();
+    const wb = csvToWorkbook(text);
+    wb._csvUrl = state.csvUrl;
+    state.agotados = wb;
+    const filas = text.split('\n').filter(r => r.trim()).length - 1;
+    document.getElementById('status1name').textContent = 'Google Sheets actualizado — ' + filas.toLocaleString() + ' registros';
+    showToast('↺ Datos actualizados — ' + filas.toLocaleString() + ' registros');
+  } catch(e) { showToast('⚠ No se pudo recargar'); }
+  btn.textContent = '↺'; btn.disabled = false;
+}
+
+function showGsError(msg) {
+  const el = document.getElementById('gsError');
+  el.textContent = msg; el.style.display = 'block';
+}
+
+// ===== ARCHIVO LOCAL =====
+function handleFile(input, key, cardId, statusId) {
+  const file = input.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'binary', cellDates: true });
+      state[key] = wb;
+      document.getElementById(cardId).classList.add('loaded');
+      document.getElementById(statusId).classList.add('show');
+      document.getElementById(statusId + 'name').textContent = file.name;
+      checkReady();
+      showToast('✓ ' + file.name + ' cargado');
+    } catch(e) { showToast('⚠ Error leyendo archivo'); }
+  };
+  reader.readAsBinaryString(file);
+}
+
+function checkReady() {
+  document.getElementById('btnRun').disabled = !(state.agotados && state.bodega);
+}
+
+// ===== ANÁLISIS =====
+function runAnalysis() {
+  const btn = document.getElementById('btnRun');
+  btn.innerHTML = '<span class="spinner"></span>PROCESANDO...';
+  btn.disabled = true;
+  setTimeout(() => {
+    try {
+      const mes = parseInt(document.getElementById('selMes').value);
+      const ano = parseInt(document.getElementById('selAno').value);
+      const result = analyze(mes, ano);
+      renderResults(result);
+      document.getElementById('results').style.display = 'block';
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+      showToast('✓ Análisis completado');
+    } catch(e) { showToast('⚠ Error: ' + e.message); console.error(e); }
+    btn.innerHTML = '▸ GENERAR ANÁLISIS';
+    btn.disabled = false;
+  }, 80);
+}
+
+function parseDate(val) {
+  if (val instanceof Date) return val;
+  if (typeof val === 'number') return new Date(Math.round((val - 25569) * 86400000));
+  if (typeof val === 'string') {
+    // Intentar formatos comunes: DD/MM/YYYY, YYYY-MM-DD, MM/DD/YYYY
+    const s = val.trim();
+    const m1 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m1) return new Date(+m1[3], +m1[2]-1, +m1[1]);
+    const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m2) return new Date(+m2[1], +m2[2]-1, +m2[3]);
+    return new Date(s);
+  }
+  return null;
+}
+
+function analyze(mes, ano) {
+  // ---- HOJA 1 ----
+  const wb = state.agotados;
+  const sheetName = wb.SheetNames.find(n => n.trim().toLowerCase().includes('hoja 1')) || wb.SheetNames[0];
+  const ws = wb.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null, raw: false });
+
+  // Detectar fila encabezado
+  let headerRow = 0;
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const r = rows[i].map(v => String(v||'').toUpperCase());
+    if (r.some(v => v.includes('FECHA')) && r.some(v => v.includes('CODIGO')||v.includes('CÓDIGO'))) {
+      headerRow = i; break;
+    }
+  }
+  const headers = rows[headerRow].map(v => String(v||'').toUpperCase().replace(/\s+/g,' ').trim());
+  const iDate = headers.findIndex(h => h.includes('FECHA'));
+  const iCod  = headers.findIndex(h => h.includes('CODIGO')||h.includes('CÓDIGO'));
+  const iQty  = headers.findIndex(h => h.includes('CANTIDAD'));
+  const iCli  = headers.findIndex(h => h.includes('CLIENTE'));
+
+  const pedidos = [];
+  for (let i = headerRow + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (!row[iDate] && !row[iCod]) continue;
+    const fecha = parseDate(row[iDate]);
+    if (!fecha || isNaN(fecha)) continue;
+    if (fecha.getMonth()+1 !== mes || fecha.getFullYear() !== ano) continue;
+    const cod = String(row[iCod]||'').trim().toUpperCase();
+    if (!cod || cod === 'CODIGO' || cod === 'NULL') continue;
+    pedidos.push({
+      codigo: cod,
+      cantidad: parseFloat(String(row[iQty]||'0').replace(',','.')) || 0,
+      cliente: String(row[iCli]||'').trim(),
+    });
+  }
+
+  // Agrupar
+  const agrup = {};
+  for (const p of pedidos) {
+    if (!agrup[p.codigo]) agrup[p.codigo] = { cantidad:0, pedidos:0, clientes:new Set() };
+    agrup[p.codigo].cantidad += p.cantidad;
+    agrup[p.codigo].pedidos++;
+    if (p.cliente) agrup[p.codigo].clientes.add(p.cliente);
+  }
+
+  // ---- BODEGA ----
+  const wb2 = state.bodega;
+  const llegaMap = {};
+  for (const sn of wb2.SheetNames) {
+    const ws2 = wb2.Sheets[sn];
+    const r2 = XLSX.utils.sheet_to_json(ws2, { header:1, defval:null, raw:false });
+    if (r2.length < 2) continue;
+    const h2 = r2[0].map(v => String(v||'').toUpperCase().trim());
+    const iC = h2.findIndex(h => h==='CODE'||h==='CODIGO'||h==='CÓDIGO');
+    const iD = h2.findIndex(h => h.includes('DESC'));
+    const iQ = h2.findIndex(h => h==='QTY'||h==='CANTIDAD');
+    if (iC < 0) continue;
+    for (let i = 1; i < r2.length; i++) {
+      const r = r2[i];
+      const cod = String(r[iC]||'').trim().toUpperCase();
+      if (!cod || cod==='CODE') continue;
+      if (!llegaMap[cod]) llegaMap[cod] = {
+        desc: iD>=0 ? String(r[iD]||'').trim() : '',
+        qty: parseFloat(String(r[iQ]||'0').replace(',','.')) || 0,
+        vieneEn: sn.trim()
+      };
+    }
+  }
+
+  // ---- CRUCE ----
+  const resumen = Object.entries(agrup).map(([cod, v]) => {
+    const ll = llegaMap[cod];
+    return { codigo:cod, cantidad:v.cantidad, pedidos:v.pedidos,
+      clientes:[...v.clientes].join(', '), llega:!!ll,
+      vieneEn: ll?ll.vieneEn:'', cantLlega:ll?ll.qty:0, desc:ll?ll.desc:'' };
+  }).sort((a,b)=>b.cantidad-a.cantidad);
+
+  const codsAgotados = new Set(resumen.map(r=>r.codigo));
+  const lleganSin = Object.entries(llegaMap)
+    .filter(([c])=>!codsAgotados.has(c))
+    .map(([c,v])=>({codigo:c,desc:v.desc,qty:v.qty,vieneEn:v.vieneEn}))
+    .sort((a,b)=>b.qty-a.qty);
+
+  return { resumen, lleganSin, totalPedidos: pedidos.length };
+}
+
+// ===== RENDER =====
+function renderResults({ resumen, lleganSin, totalPedidos }) {
+  dataSets = { resumen, lleganSin };
+  const si = resumen.filter(r=>r.llega), no = resumen.filter(r=>!r.llega);
+  document.getElementById('stTotal').textContent = resumen.length;
+  document.getElementById('stSi').textContent = si.length;
+  document.getElementById('stNo').textContent = no.length;
+  document.getElementById('stPedidos').textContent = totalPedidos;
+
+  fillTable('tbl-all','cnt-all', resumen, r=>`
+    <td><span class="code-chip">${r.codigo}</span></td>
+    <td style="text-align:center">${r.cantidad.toLocaleString()}</td>
+    <td style="text-align:center">${r.pedidos}</td>
+    <td style="text-align:center">${r.vieneEn?`<span class="badge badge-gray">${r.vieneEn}</span>`:'—'}</td>
+    <td style="text-align:center">${r.llega?'<span class="badge badge-green">✅ SÍ LLEGA</span>':'<span class="badge badge-red">❌ NO LLEGA</span>'}</td>
+    <td title="${r.clientes}" style="color:var(--muted);font-size:11px">${r.clientes}</td>`);
+
+  fillTable('tbl-si','cnt-si', si, r=>`
+    <td><span class="code-chip">${r.codigo}</span></td>
+    <td style="color:var(--muted);font-size:11px">${r.desc||'—'}</td>
+    <td style="text-align:center">${r.cantidad.toLocaleString()}</td>
+    <td style="text-align:center">${r.pedidos}</td>
+    <td style="text-align:center"><span class="badge badge-yellow">${r.vieneEn}</span></td>
+    <td style="text-align:center">${r.cantLlega.toLocaleString()}</td>
+    <td title="${r.clientes}" style="color:var(--muted);font-size:11px">${r.clientes}</td>`);
+
+  fillTable('tbl-no','cnt-no', no, r=>{
+    const p = r.cantidad>=50?'<span class="badge badge-red">🔴 ALTA</span>':r.cantidad>=20?'<span class="badge badge-orange">🟡 MEDIA</span>':'<span class="badge badge-green">🟢 BAJA</span>';
+    return `<td><span class="code-chip">${r.codigo}</span></td>
+    <td style="text-align:center">${r.cantidad.toLocaleString()}</td>
+    <td style="text-align:center">${r.pedidos}</td>
+    <td style="text-align:center">${p}</td>
+    <td title="${r.clientes}" style="color:var(--muted);font-size:11px">${r.clientes}</td>`;});
+
+  fillTable('tbl-llegan','cnt-llegan', lleganSin, r=>`
+    <td><span class="code-chip">${r.codigo}</span></td>
+    <td style="color:var(--muted);font-size:11px">${r.desc||'—'}</td>
+    <td style="text-align:center">${r.qty.toLocaleString()}</td>
+    <td style="text-align:center"><span class="badge badge-yellow">${r.vieneEn}</span></td>`);
+}
+
+function fillTable(id, cntId, data, rowFn) {
+  const tbody = document.querySelector('#'+id+' tbody');
+  tbody.innerHTML = data.length===0
+    ? `<tr><td colspan="10"><div class="empty-state">Sin registros</div></td></tr>`
+    : data.map(r=>`<tr>${rowFn(r)}</tr>`).join('');
+  document.getElementById(cntId).textContent = data.length+' registros';
+  document.getElementById(id)._data = data;
+  document.getElementById(id)._rowFn = rowFn;
+}
+
+function filterTable(id, q) {
+  document.querySelectorAll('#'+id+' tbody tr').forEach(tr=>{
+    tr.style.display = tr.textContent.toLowerCase().includes(q.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function sortTable(id, col) {
+  const tbl = document.getElementById(id);
+  if (!tbl._data) return;
+  const keys = Object.keys(tbl._data[0]);
+  const key = keys[col];
+  tbl._asc = !tbl._asc;
+  tbl._data.sort((a,b)=>{
+    const va=a[key], vb=b[key];
+    if (typeof va==='number') return tbl._asc ? va-vb : vb-va;
+    return tbl._asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  document.querySelector('#'+id+' tbody').innerHTML = tbl._data.map(r=>`<tr>${tbl._rowFn(r)}</tr>`).join('');
+}
+
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById(id).classList.add('active');
+}
+
+function exportTab(which) {
+  const {resumen,lleganSin} = dataSets;
+  const mes = document.getElementById('selMes').options[document.getElementById('selMes').selectedIndex].text.toUpperCase();
+  const ano = document.getElementById('selAno').value;
+  let data, fn;
+  if (which==='all') {
+    data=[['CÓDIGO','CANT. SOLICITADA','# PEDIDOS','VIENE EN','ESTADO','CLIENTES'],
+      ...resumen.map(r=>[r.codigo,r.cantidad,r.pedidos,r.vieneEn,r.llega?'SÍ LLEGA':'NO LLEGA',r.clientes])];
+    fn=`AGOTADOS_${mes}_${ano}_TODOS.xlsx`;
+  } else if (which==='si') {
+    const si=resumen.filter(r=>r.llega);
+    data=[['CÓDIGO','DESCRIPCIÓN','CANT. SOLICITADA','# PEDIDOS','VIENE EN','CANT. QUE LLEGA','CLIENTES'],
+      ...si.map(r=>[r.codigo,r.desc,r.cantidad,r.pedidos,r.vieneEn,r.cantLlega,r.clientes])];
+    fn=`AGOTADOS_${mes}_${ano}_SI_LLEGAN.xlsx`;
+  } else if (which==='no') {
+    const no=resumen.filter(r=>!r.llega);
+    data=[['CÓDIGO','CANT. SOLICITADA','# PEDIDOS','PRIORIDAD','CLIENTES'],
+      ...no.map(r=>[r.codigo,r.cantidad,r.pedidos,r.cantidad>=50?'ALTA':r.cantidad>=20?'MEDIA':'BAJA',r.clientes])];
+    fn=`AGOTADOS_${mes}_${ano}_NO_LLEGAN.xlsx`;
+  } else {
+    data=[['CÓDIGO','DESCRIPCIÓN','CANTIDAD QUE LLEGA','VIENE EN'],
+      ...lleganSin.map(r=>[r.codigo,r.desc,r.qty,r.vieneEn])];
+    fn=`LLEGAN_SIN_PEDIDO_${mes}_${ano}.xlsx`;
+  }
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), 'Reporte');
+  XLSX.writeFile(wb, fn);
+  showToast('↓ Descargando '+fn);
+}
+
+function showToast(msg) {
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2800);
+}
+</script>
+</body>
+</html>
